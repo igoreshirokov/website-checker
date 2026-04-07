@@ -1,12 +1,30 @@
 package app
 
 import (
-	_ "embed"
+	"os"
+
+	"website-checker/internal/config"
+	"website-checker/internal/i18n"
+	"website-checker/internal/notification"
+	"website-checker/internal/systray"
 )
 
-var AppName string
+var (
+	cfg *config.Config
+)
 
-//go:embed assets/danger.ico
-var IconBad []byte
-//go:embed assets/info.ico
-var IconGood []byte
+func Run(args []string) {
+	cfg, configFilePath, err := config.Load()
+	if err != nil {
+		notification.Error("Configuration file does not exist: " + err.Error())
+		os.Exit(1)
+	}
+
+	i18n.Load(cfg.General.Lang)
+	config.AppName = i18n.T("app_name")
+
+	notification.Init(cfg)
+	notification.SendConfigLoaded()
+
+	systray.Run(cfg, *configFilePath)
+}
