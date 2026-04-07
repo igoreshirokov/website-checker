@@ -1,6 +1,7 @@
 package config
 
 import (
+	_ "embed"
 	"flag"
 	"fmt"
 	"log"
@@ -11,6 +12,14 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+var AppName string
+
+//go:embed assets/danger.ico
+var IconBad []byte
+
+//go:embed assets/info.ico
+var IconGood []byte
 
 type Config struct {
 	Sites         []SiteConfig  `yaml:"sites"`
@@ -30,8 +39,8 @@ type Notifications struct {
 }
 
 type GeneralConfig struct {
-	CheckInterval    int `yaml:"check_interval"`
-	ConcurrentChecks int `yaml:"concurrent_checks"`
+	CheckInterval    int    `yaml:"check_interval"`
+	ConcurrentChecks int    `yaml:"concurrent_checks"`
 	Lang             string `yaml:"lang"`
 }
 
@@ -61,8 +70,6 @@ func Load() (*Config, *string, error) {
 
 	return cfg, configFile, nil
 }
-
-
 
 func parse(filename string) (*Config, error) {
 	data, err := os.ReadFile(filename)
