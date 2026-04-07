@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"sync"
 	"time"
-	"website-checker/internal/app"
 	"website-checker/internal/checker"
 	"website-checker/internal/config"
 	"website-checker/internal/i18n"
@@ -19,34 +18,38 @@ var (
 	stopChan        chan bool
 	mutex           sync.RWMutex
 	checking        bool
-	cfg				*config.Config
+	cfg             *config.Config
 	lastCheckTime   time.Time
 	lastCheckResult string
-	configFile 		*string
+	configFile      *string
+	mStatus         *systray.MenuItem
 )
 
 func Run(globalConfig *config.Config, configFilePath string) {
 	cfg = globalConfig
 	configFile = &configFilePath
-	runWithTray()
-}
-
-func runWithTray() {
 	// Канал для остановки
 	stopChan = make(chan bool)
 
 	// Запускаем системный трей
-	systray.Run(onReady, onExit)
+	systray.Run(onReady, nil)
 }
 
 func onReady() {
-	// Устанавливаем иконку
-	systray.SetIcon(app.IconGood)
+	setIcon()
+	setMenu()
+	go backgroundChecker(mStatus)
+}
+
+func setIcon() {
+	systray.SetIcon(config.IconGood)
 	systray.SetTitle(i18n.T("checker_title"))
 	systray.SetTooltip(i18n.T("checker_tooltip"))
+}
 
+func setMenu() {
 	mCheckNow := systray.AddMenuItem(i18n.T("checker_check_now"), i18n.T("checker_check_now_tooltip"))
-	mStatus := systray.AddMenuItem(i18n.T("checker_status_not_checked"), i18n.T("checker_status_not_checked_tooltip"))
+	mStatus = systray.AddMenuItem(i18n.T("checker_status_not_checked"), i18n.T("checker_status_not_checked_tooltip"))
 	mStatus.Disable()
 
 	systray.AddSeparator()
@@ -60,10 +63,6 @@ func onReady() {
 	mRestart := systray.AddMenuItem(i18n.T("checker_restart"), i18n.T("checker_restart_tooltip"))
 	mQuit := systray.AddMenuItem(i18n.T("checker_quit"), i18n.T("checker_quit_tooltip"))
 
-	// Запускаем фоновую проверку
-	go backgroundChecker(mStatus)
-
-	// Обработка событий меню
 	go func() {
 		for {
 			select {
@@ -92,6 +91,7 @@ func onReady() {
 				restartApp()
 
 			case <-mQuit.ClickedCh:
+				close(stopChan)
 				systray.Quit()
 				return
 			}
@@ -140,16 +140,16 @@ func updateStatus(results []checker.CheckResult, statusItem *systray.MenuItem) {
 
 	// Обновляем иконку в зависимости от статуса
 	if allOK {
-		systray.SetIcon(app.IconGood)
-		statusItem.SetIcon(app.IconGood)
-		statusItem.SetTitle(fmt.Sprintf(i18n.T("checker_status_ok"), lastCheckTime.Format("15:04")))
+		systray.SetIcon(config.IconGood)
+		statusItem.SetIcon(config.IconGood)
+		statusItem.SetTitle(i18n.T("checker_status_ok", "time", lastCheckTime.Format("15:04")))
 		if cfg.Notifications.ShowPopup {
 			notification.SendSuccess()
 		}
 	} else {
-		systray.SetIcon(app.IconBad)
-		statusItem.SetIcon(app.IconBad)
-		statusItem.SetTitle(i18n.T("checker_status_error", len(failed), lastCheckTime.Format("15:04")))
+		systray.SetIcon(config.IconBad)
+		statusItem.SetIcon(config.IconBad)
+		statusItem.SetTitle(i18n.T("checker_status_error", "count", len(failed), "time", lastCheckTime.Format("15:04")))
 		if cfg.Notifications.ShowPopup {
 			notification.SendFail(failed)
 		}
@@ -194,9 +194,9 @@ func togglePause(menuItem *systray.MenuItem) {
 	mutex.Lock()
 	checking = !checking
 	if checking {
-		menuItem.SetTitle(i18n.T("checker_resume"))
-	} else {
 		menuItem.SetTitle(i18n.T("checker_pause"))
+	} else {
+		menuItem.SetTitle(i18n.T("checker_resume"))
 	}
 	mutex.Unlock()
 }
